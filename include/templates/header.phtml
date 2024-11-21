@@ -1,0 +1,33 @@
+<?php 
+$title = is_null($this->title)? 'Iowa Environmental Mesonet': "IEM :: {$this->title}";
+// Page should refresh
+$refresh = "";
+if ($this->refresh > 0){
+  $refresh = sprintf("<meta http-equiv=\"refresh\" content=\"%s;\">",
+    $this->refresh);
+}
+$headextra = is_null($this->headextra) ? '': $this->headextra;
+if ($this->iemss){
+  $headextra .= <<<EOF
+<link rel="stylesheet" href="/vendor/openlayers/7.2.2/ol.css" type="text/css">
+EOF;
+}
+$bodyextra = is_null($this->bodyextra) ? '': " {$this->bodyextra}";
+?>
+<!DOCTYPE html>
+<html lang="en" dir="ltr" prefix="og: https://ogp.me/ns#">
+  <head>
+    <meta charset="utf-8" />
+<link rel="canonical" href="https://rdfwx.agron.iastate.edu/" />
+<link rel="shortlink" href="https://rdfwx.agron.iastate.edu/" />
+<meta name="MobileOptimized" content="width" />
+<meta name="HandheldFriendly" content="true" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<title>Research and Demonstration Farm Weather Stations</title>
+
+<link rel="stylesheet" media="all" href="/vendor/iastate22/css/index.css" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
+  <body>

@@ -1,0 +1,57 @@
+<?php 
+$jsextra = is_null($this->jsextra) ? '' : $this->jsextra;
+if ($this->iemss){
+    $jsextra .= <<<EOF
+<script src="/vendor/openlayers/7.2.2/ol.js"></script>
+<script src="/js/iemss.js"></script>
+EOF;
+}
+
+?>
+<footer class="site-footer site-footer--ecosystem">
+  <div class="site-footer__flex-wrap">
+    <div class="site-footer__logo-social-links-wrap">
+      <a href="https://www.iastate.edu" class="site-footer__logo">
+        <img  src="/vendor/iastate22/img/iowa-state-university-logo-with-tagline-sci-tech.svg" alt="Iowa State University of Science and Technology" loading="lazy" width="516" height="69">
+      </a>
+                    
+                </div>
+
+
+<div class="site-footer__site-org-contact-info">
+
+  <h2 class="site-footer__section-label">Department of Agronomy</h2>
+    <div class="site-footer__site-org-contact-email-phone-wrap">
+          <div class="site-footer__site-org-contact-phone">
+                  <p>            515-294-5978</p>
+              </div>
+              <div class="site-footer__site-org-contact-email">
+                  <p>Daryl Herzmann, developer:             <a href="mailto:akrherz@iastate.edu">akrherz@iastate.edu</a></p>
+              </div>
+      </div>
+
+</div>
+
+  </div>
+
+  <div class="site-footer__bottom-wrap">
+    <nav class="site-footer__utility-nav" aria-label="Footer Utility">
+      <ul>
+        <li><a href="https://www.iastate.edu/disclaimers-and-terms">Privacy Policy</a></li>
+        <li><a href="https://www.policy.iastate.edu/policy/discrimination">Non-discrimination Policy</a></li>
+        <li><a href="https://www.digitalaccess.iastate.edu/">Digital Access and Accessibility</a></li>
+        <li><a href="https://www.iastate.edu/consumer-information">Consumer Information</a></li>
+      </ul>
+    </nav>
+    <div class="site-footer__copyright"><p>&copy; Iowa State University of Science and Technology</p></div>
+  </div>
+</footer>
+
+  </div>
+</div>
+
+  </div>
+<script src="/vendor/iastate22/js/index.js"></script>
+<?php echo $jsextra; ?>
+</body>
+</html>
