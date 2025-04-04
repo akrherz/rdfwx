@@ -33,10 +33,6 @@ class MyView {
             $this->template_dir =  dirname(__FILE__).'/templates/';  // skipcq
     }
     public function render($template_file) {
-        if ($this->iem_resource != null) {
-            require_once dirname(__FILE__) . "/generators.php";
-            $this->content .= get_website_citations($this->iem_resource);
-        }
         if (file_exists($this->template_dir.$template_file)) {
             include $this->template_dir.$template_file;
         } else {

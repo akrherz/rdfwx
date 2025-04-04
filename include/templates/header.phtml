@@ -7,11 +7,6 @@ if ($this->refresh > 0){
     $this->refresh);
 }
 $headextra = is_null($this->headextra) ? '': $this->headextra;
-if ($this->iemss){
-  $headextra .= <<<EOF
-<link rel="stylesheet" href="/vendor/openlayers/7.2.2/ol.css" type="text/css">
-EOF;
-}
 $bodyextra = is_null($this->bodyextra) ? '': " {$this->bodyextra}";
 ?>
 <!DOCTYPE html>
@@ -29,5 +24,6 @@ $bodyextra = is_null($this->bodyextra) ? '': " {$this->bodyextra}";
 <link rel="stylesheet" media="all" href="/vendor/iastate22/css/index.css" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?php echo $headextra; ?>
   </head>
   <body>
