@@ -200,7 +200,7 @@ async function renderForecastForLatLon(lat, lon) {
                         <div style="font-size:0.9rem;color:#555">${period.windSpeed || ''} ${period.windDirection || ''}</div>
                     </div>
                     <div style="text-align:right">
-                        <div style="font-size:1.2rem;font-weight:800">${period.temperature !== null ? period.temperature + '°' + period.temperatureUnit : ''}</div>
+                        <div style="font-size:1.2rem;font-weight:800">${period.temperature !== null ? `${period.temperature  }°${  period.temperatureUnit}` : ''}</div>
                     </div>
                 </header>
                 <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
@@ -284,14 +284,14 @@ function getTemperatureColor(temp) {
 function createWindArrowStyle(speed, direction) {
     return new ol.style.Style({
         image: new ol.style.Icon({
-            src: 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+            src: `data:image/svg+xml;utf8,${  encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" width="75" height="75" viewBox="0 0 75 75">
                     <g transform="rotate(${direction}, 37.5, 37.5)">
                         <line x1="37.5" y1="37.5" x2="37.5" y2="10" stroke="black" stroke-width="2.5" />
                         <polygon points="37.5,10 32.5,15 42.5,15" fill="black" />
                     </g>
                 </svg>
-            `),
+            `)}`,
             scale: Math.max(1, Math.min(2.5, speed / 10)), // Adjusted scaling for better visibility
             anchor: [0.5, 0.5], // Ensure the arrow's tail starts at the observation's location
         }),
