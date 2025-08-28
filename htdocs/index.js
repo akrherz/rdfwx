@@ -1,6 +1,6 @@
 const GEOJSON_URI = "https://mesonet.agron.iastate.edu/api/1/currents.geojson?network=ISUSM";
 
-let map;
+let map = null;
 let highlightedFeature = null; // Track the currently highlighted feature
 let latestGeoJSON = null; // store last fetched GeoJSON for fallbacks
 
@@ -204,7 +204,7 @@ async function renderForecastForLatLon(lat, lon) {
                     </div>
                 </header>
                 <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
-                    <div class="nws-icon"><img src="${period.icon || ''}" alt="${(period.shortForecast||'').replace(/\"/g,'')}"></div>
+                    <div class="nws-icon"><img src="${period.icon || ''}" alt="${(period.shortForecast||'').replace(/"/g,'')}"></div>
                     <div style="flex:1">
                         <div class="nws-short">${period.shortForecast || ''}</div>
                         <details><summary>Details</summary><div style="margin-top:6px">${period.detailedForecast || ''}</div></details>
