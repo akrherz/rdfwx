@@ -1,0 +1,17 @@
+ci:
+  autoupdate_schedule: quarterly
+repos:
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: 'v9.34.0'
+    hooks:
+      - id: eslint
+        additional_dependencies:
+          - "eslint@^9.28.0"
+          - "@eslint/js@^9.28.0"
+          - "globals@^16.2.0"
+        files: \.js?$
+        types: [file]
+        args:
+        - --fix
+        language_version: 'system'  # Use system Node.js which should support ES modules
+

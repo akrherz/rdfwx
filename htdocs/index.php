@@ -1,5 +1,6 @@
 <?php
 require_once "../include/myview.php";
+$OL="10.6.1";
 $t = new MyView();
 $t->content = <<<EOM
 
@@ -51,12 +52,12 @@ $t->content = <<<EOM
 
 EOM;
 $t->headextra = <<<EOM
-<link rel="stylesheet" href="/vendor/openlayers/10.4.0/ol.css">
+<link rel="stylesheet" href="/vendor/openlayers/{$OL}/ol.css">
 <link rel="stylesheet" href="styles.css">
 EOM;
 $t->jsextra = <<<EOM
-<script src="/vendor/openlayers/10.4.0/ol.js"></script>
-<script src="index.js"></script>
+<script src="/vendor/openlayers/{$OL}/ol.js"></script>
+<script src="index.js?v=2"></script>
 EOM;
 
 $t->render('full.phtml');
