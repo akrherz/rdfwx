@@ -2,6 +2,7 @@ const GEOJSON_URI = "https://mesonet.agron.iastate.edu/api/1/currents.geojson?ne
 
 let map;
 let highlightedFeature = null; // Track the currently highlighted feature
+let latestGeoJSON = null; // store last fetched GeoJSON for fallbacks
 
 function update_page(data) {
     const site = $("#site").val();
@@ -12,6 +13,16 @@ function update_page(data) {
         $("#rain").text(`Rainfall: ${props.pday} in`);
         $("#humidity").text(`Humidity: ${props.relh} %`);
         $("#wind").text(`Wind Speed: ${props.sknt} knots`);
+        // If the GeoJSON feature has coordinates (standard GeoJSON: [lon, lat])
+        try {
+            const coords = feature.geometry && feature.geometry.coordinates;
+            if (coords && coords.length >= 2) {
+                // coords is [lon, lat]
+                renderForecastForLatLon(coords[1], coords[0]);
+            }
+        } catch (e) {
+            console.warn('Unable to determine coordinates for forecast lookup', e);
+        }
     }
 }
 
@@ -27,6 +38,8 @@ function load_geojson() {
         type: "GET",
         dataType: "json",
         success: (data) => {
+            // keep a copy of the raw GeoJSON for coordinate fallbacks
+            latestGeoJSON = data;
             update_page(data);
             update_map(data);
             updateStatusMessage(); // Update the status message on successful fetch
@@ -84,6 +97,127 @@ function update_dropdown_and_page(feature) {
 
     // Persist the selected station in a cookie
     setCookie('selectedStation', station, 7);
+
+    // Render NWS forecast for the selected feature's location
+    try {
+        const lonlat = ol.proj.toLonLat(feature.getGeometry().getCoordinates()); // [lon, lat]
+        if (lonlat && lonlat.length >= 2) {
+            renderForecastForLatLon(lonlat[1], lonlat[0]);
+        }
+    } catch (e) {
+        console.warn('Could not compute lon/lat for forecast lookup', e);
+        // Fallback: try to get coordinates from the last-fetched GeoJSON by station id
+        try {
+            if (latestGeoJSON && latestGeoJSON.features) {
+                const f = latestGeoJSON.features.find(ff => ff.properties && ff.properties.station === station);
+                if (f && f.geometry && f.geometry.coordinates && f.geometry.coordinates.length >= 2) {
+                    renderForecastForLatLon(f.geometry.coordinates[1], f.geometry.coordinates[0]);
+                }
+            }
+        } catch (e2) {
+            console.warn('Fallback forecast lookup failed', e2);
+        }
+    }
+}
+
+// Ensure a forecast container exists below the map and minimal styles for the forecast row
+function ensureForecastContainerExists() {
+    if (!document.getElementById('nws-forecast-row')) {
+        const mapEl = document.getElementById('map');
+        const container = document.createElement('div');
+        container.id = 'nws-forecast-row';
+        container.style.display = 'flex';
+        container.style.flexWrap = 'nowrap';
+        container.style.overflowX = 'auto';
+        container.style.gap = '8px';
+        container.style.padding = '8px';
+        container.style.background = 'rgba(255,255,255,0.95)';
+        container.style.borderTop = '1px solid #ccc';
+        container.style.boxSizing = 'border-box';
+        container.style.width = '100%';
+        container.setAttribute('aria-live', 'polite');
+
+        // Place the forecast row after the map element
+        if (mapEl && mapEl.parentNode) {
+            mapEl.parentNode.insertBefore(container, mapEl.nextSibling);
+        } else {
+            document.body.appendChild(container);
+        }
+    }
+}
+
+// Small helper to inject card styles if not already present
+function addForecastStyles() {
+    if (document.getElementById('nws-forecast-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'nws-forecast-styles';
+    style.textContent = `
+        #nws-forecast-row .nws-card { min-width: 200px; max-width: 320px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:8px; box-shadow:0 1px 2px rgba(0,0,0,0.08); font-family:Arial,Helvetica,sans-serif; }
+        #nws-forecast-row .nws-card header { display:flex; justify-content:space-between; align-items:center; }
+        #nws-forecast-row .nws-card .nws-icon img { width:64px; height:64px; object-fit:contain; }
+        #nws-forecast-row .nws-card .nws-short { font-weight:600; margin-top:6px; }
+        #nws-forecast-row .nws-card details { margin-top:6px; }
+    `;
+    document.head.appendChild(style);
+}
+
+// Fetch NWS point/forecast for a lat,lon and render simple cards
+async function renderForecastForLatLon(lat, lon) {
+    ensureForecastContainerExists();
+    addForecastStyles();
+    const container = document.getElementById('nws-forecast-row');
+    if (!container) return;
+    container.innerHTML = '<div style="padding:8px">Loading forecast...</div>';
+
+    try {
+        // 1) Lookup point metadata
+        const pointResp = await fetch(`https://api.weather.gov/points/${lat},${lon}`);
+        if (!pointResp.ok) throw new Error('Point lookup failed');
+        const pointJson = await pointResp.json();
+        const forecastUrl = pointJson.properties && pointJson.properties.forecast;
+        if (!forecastUrl) throw new Error('No forecast URL for point');
+
+        // 2) Fetch forecast periods
+        const forecastResp = await fetch(forecastUrl);
+        if (!forecastResp.ok) throw new Error('Forecast fetch failed');
+        const forecastJson = await forecastResp.json();
+        const periods = (forecastJson.properties && forecastJson.properties.periods) || [];
+
+        // 3) Render periods as horizontal cards (limit to first 12 to avoid huge rows)
+        container.innerHTML = '';
+        if (!periods.length) {
+            container.innerHTML = '<div style="padding:8px">Forecast not available</div>';
+            return;
+        }
+
+        periods.slice(0, 12).forEach(period => {
+            const card = document.createElement('article');
+            card.className = 'nws-card';
+            card.innerHTML = `
+                <header>
+                    <div>
+                        <div style="font-weight:700">${period.name}</div>
+                        <div style="font-size:0.9rem;color:#555">${period.windSpeed || ''} ${period.windDirection || ''}</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-size:1.2rem;font-weight:800">${period.temperature !== null ? period.temperature + '°' + period.temperatureUnit : ''}</div>
+                    </div>
+                </header>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                    <div class="nws-icon"><img src="${period.icon || ''}" alt="${(period.shortForecast||'').replace(/\"/g,'')}"></div>
+                    <div style="flex:1">
+                        <div class="nws-short">${period.shortForecast || ''}</div>
+                        <details><summary>Details</summary><div style="margin-top:6px">${period.detailedForecast || ''}</div></details>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+
+    } catch (err) {
+        console.warn('Forecast render error', err);
+        container.innerHTML = `<div style="padding:8px;color:#900">Forecast load failed: ${err.message}</div>`;
+    }
 }
 
 function showTooltip(feature, coordinate) {
@@ -314,6 +448,10 @@ $(document).ready(() => {
     $(window).on('resize', () => {
         map.updateSize();
     });
+
+    // Ensure forecast container exists even before any selection
+    ensureForecastContainerExists();
+    addForecastStyles();
 
     // Add status message element to the map container
     const statusElement = document.createElement('div');
