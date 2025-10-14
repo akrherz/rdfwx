@@ -4,15 +4,47 @@ let map = null;
 let highlightedFeature = null; // Track the currently highlighted feature
 let latestGeoJSON = null; // store last fetched GeoJSON for fallbacks
 
+// Utility function to convert knots to MPH and round to integer
+function knotsToMph(knots) {
+    if (knots === null || knots === undefined || isNaN(knots)) {
+        return 'N/A';
+    }
+    return Math.round(knots * 1.15078); // 1 knot = 1.15078 mph
+}
+
+// Utility function to convert degrees to cardinal direction
+function degreesToCardinal(degrees) {
+    if (degrees === null || degrees === undefined || isNaN(degrees)) {
+        return '';
+    }
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const index = Math.round(degrees / 22.5) % 16;
+    return directions[index];
+}
+
+// Utility function to format numbers with proper handling of null/undefined
+function formatValue(value, unit = '', decimals = 0) {
+    if (value === null || value === undefined || isNaN(value)) {
+        return 'N/A';
+    }
+    return decimals > 0 ? `${value.toFixed(decimals)}${unit}` : `${Math.round(value)}${unit}`;
+}
+
 function update_page(data) {
     const site = $("#site").val();
     const feature = data.features.find(f => f.properties.station === site);
     if (feature) {
         const props = feature.properties;
-        $("#airtemp").text(`Air Temp: ${props.tmpf} °F`);
-        $("#rain").text(`Rainfall: ${props.pday} in`);
-        $("#humidity").text(`Humidity: ${props.relh} %`);
-        $("#wind").text(`Wind Speed: ${props.sknt} knots`);
+        $("#airtemp").text(`Air Temp: ${formatValue(props.tmpf, '°F')}`);
+        $("#rain").text(`Rainfall: ${formatValue(props.pday, ' in', 2)}`);
+        $("#humidity").text(`Humidity: ${formatValue(props.relh, '%')}`);
+        
+        // Enhanced wind display with direction
+        const windSpeed = knotsToMph(props.sknt);
+        const windDir = degreesToCardinal(props.drct);
+        const windText = windDir ? `Wind: ${windSpeed} mph ${windDir}` : `Wind Speed: ${windSpeed} mph`;
+        $("#wind").text(windText);
+        
         // If the GeoJSON feature has coordinates (standard GeoJSON: [lon, lat])
         try {
             const coords = feature.geometry && feature.geometry.coordinates;
@@ -23,6 +55,13 @@ function update_page(data) {
         } catch (e) {
             console.warn('Unable to determine coordinates for forecast lookup', e);
         }
+    } else {
+        // Handle case where selected station is not found in data
+        $("#airtemp").text("Air Temp: No data");
+        $("#rain").text("Rainfall: No data");
+        $("#humidity").text("Humidity: No data");
+        $("#wind").text("Wind Speed: No data");
+        console.warn(`Station ${site} not found in current data`);
     }
 }
 
@@ -30,6 +69,7 @@ function updateStatusMessage() {
     const statusElement = document.getElementById('status-message');
     const now = new Date();
     statusElement.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+    statusElement.style.color = '#333'; // Reset color on successful update
 }
 
 function load_geojson() {
@@ -44,9 +84,16 @@ function load_geojson() {
             update_map(data);
             updateStatusMessage(); // Update the status message on successful fetch
         },
-        error: () => {
+        error: (xhr, status, error) => {
             const statusElement = document.getElementById('status-message');
-            statusElement.textContent = 'Failed to fetch data';
+            statusElement.textContent = `Failed to fetch data: ${error}`;
+            statusElement.style.color = '#900';
+            
+            // Update weather displays to show error state
+            $("#airtemp").text("Air Temp: Error");
+            $("#rain").text("Rainfall: Error");
+            $("#humidity").text("Humidity: Error");
+            $("#wind").text("Wind Speed: Error");
         }
     });
 }
@@ -87,10 +134,15 @@ function update_dropdown_and_page(feature) {
     $("#site").val(station);
 
     // Update the displayed data
-    $("#airtemp").text(`Air Temp: ${props.tmpf} °F`);
-    $("#rain").text(`Rainfall: ${props.pday} in`);
-    $("#humidity").text(`Humidity: ${props.relh} %`);
-    $("#wind").text(`Wind Speed: ${props.sknt} knots`);
+    $("#airtemp").text(`Air Temp: ${formatValue(props.tmpf, '°F')}`);
+    $("#rain").text(`Rainfall: ${formatValue(props.pday, ' in', 2)}`);
+    $("#humidity").text(`Humidity: ${formatValue(props.relh, '%')}`);
+    
+    // Enhanced wind display with direction
+    const windSpeed = knotsToMph(props.sknt);
+    const windDir = degreesToCardinal(props.drct);
+    const windText = windDir ? `Wind: ${windSpeed} mph ${windDir}` : `Wind Speed: ${windSpeed} mph`;
+    $("#wind").text(windText);
 
     // Highlight the selected station on the map
     highlightSelectedStation(feature);
@@ -231,7 +283,11 @@ function showTooltip(feature, coordinate) {
 
     const tooltipElement = document.getElementById('tooltip');
     const props = feature.getProperties();
-    tooltipElement.textContent = `${props.station}: ${props.tmpf}°F, ${props.sknt} knots`;
+    const windSpeedMph = knotsToMph(props.sknt);
+    const windDir = degreesToCardinal(props.drct);
+    const tempDisplay = formatValue(props.tmpf, '°F');
+    const windDisplay = windDir ? `${windSpeedMph} mph ${windDir}` : `${windSpeedMph} mph`;
+    tooltipElement.textContent = `${props.station}: ${tempDisplay}, ${windDisplay}`;
     tooltipElement.style.left = `${coordinate[0]}px`;
     tooltipElement.style.top = `${coordinate[1]}px`;
     tooltipElement.style.display = 'block';
@@ -282,6 +338,8 @@ function getTemperatureColor(temp) {
 }
 
 function createWindArrowStyle(speed, direction) {
+    // Convert knots to mph for better scaling
+    const speedMph = speed * 1.15078;
     return new ol.style.Style({
         image: new ol.style.Icon({
             src: `data:image/svg+xml;utf8,${  encodeURIComponent(`
@@ -292,7 +350,7 @@ function createWindArrowStyle(speed, direction) {
                     </g>
                 </svg>
             `)}`,
-            scale: Math.max(1, Math.min(2.5, speed / 10)), // Adjusted scaling for better visibility
+            scale: Math.max(0.8, Math.min(2.5, speedMph / 12)), // Adjusted scaling for MPH values
             anchor: [0.5, 0.5], // Ensure the arrow's tail starts at the observation's location
         }),
     });

@@ -57,7 +57,7 @@ $t->headextra = <<<EOM
 EOM;
 $t->jsextra = <<<EOM
 <script src="/vendor/openlayers/{$OL}/ol.js"></script>
-<script src="index.js?v=2"></script>
+<script src="index.js?v=3"></script>
 EOM;
 
 $t->render('full.phtml');

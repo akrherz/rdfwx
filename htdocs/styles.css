@@ -41,39 +41,49 @@
 
 .weather-container {
     display: grid; /* Use grid layout for compact arrangement */
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* Responsive grid */
-    gap: 10px; /* Reduce spacing between items */
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); /* Slightly wider columns */
+    gap: 12px; /* Increased spacing between items */
     position: absolute;
     top: 10px;
     right: 10px;
     z-index: 10;
-    background-color: rgba(255, 255, 255, 0.9);
-    padding: 5px; /* Reduce padding */
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    background-color: rgba(255, 255, 255, 0.95); /* Slightly more opaque */
+    padding: 12px; /* Increased padding */
+    border-radius: 10px; /* Larger border radius */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* Enhanced shadow */
+    border: 1px solid rgba(0, 0, 0, 0.1); /* Subtle border */
 }
 
 .weather-item {
-    padding: 5px; /* Reduce padding */
+    padding: 8px; /* Slightly increased padding */
     background-color: #ffffff;
     border: 1px solid #ddd;
-    border-radius: 4px; /* Smaller border radius */
+    border-radius: 6px; /* Slightly larger border radius */
     text-align: center;
-    font-size: 0.9em; /* Reduce font size */
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-size: 0.95em; /* Slightly larger font size for better readability */
+    font-weight: 500; /* Medium font weight */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.2s ease; /* Smooth transition for hover effects */
+}
+
+.weather-item:hover {
+    background-color: #f8f9fa;
 }
 
 /* Tooltip styling */
 .tooltip {
     position: absolute;
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.85);
     color: white;
-    padding: 5px;
-    border-radius: 4px;
-    font-size: 0.8em;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 500;
     pointer-events: none;
     z-index: 15;
     display: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Highlight animation for the selected station */
@@ -90,4 +100,39 @@
 .weather-item p {
     font-size: 1.5em;
     color: #555;
+}
+
+/* Responsive design improvements */
+@media (max-width: 768px) {
+    .weather-container {
+        position: static;
+        margin-bottom: 10px;
+        grid-template-columns: repeat(2, 1fr); /* 2 columns on mobile */
+    }
+    
+    .weather-item {
+        font-size: 0.85em;
+        padding: 6px;
+    }
+    
+    .map-container {
+        height: 400px;
+    }
+    
+    #map {
+        height: 400px;
+    }
+}
+
+@media (max-width: 480px) {
+    .weather-container {
+        grid-template-columns: 1fr; /* Single column on very small screens */
+        gap: 8px;
+        padding: 8px;
+    }
+    
+    .weather-item {
+        font-size: 0.8em;
+        padding: 5px;
+    }
 }
