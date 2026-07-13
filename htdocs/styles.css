@@ -1,138 +1,409 @@
-.map-container {
-    width: 100%;
-    height: 500px; /* Ensure the map has a fixed height */
-    position: relative;
-    flex: 2;
-    min-height: 400px;
-    background-color: #eaeaea;
-    display: block; /* Ensure the container is treated as a block element */
-    position: relative; /* Ensure child elements can be absolutely positioned */
+@import url("https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap");
+
+:root {
+    --panel-bg: #f3f8fb;
+    --panel-border: #b7d3df;
+    --panel-heading: #186b8b;
+    --stage-bg: #eaf3f8;
+    --stage-border: #2e8fb2;
+    --status-bg: #ebf3cf;
+    --status-border: #a8b640;
+    --olive: #9ea80f;
+    --olive-dark: #838b0a;
 }
-#map {
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.wx-layout {
+    display: grid;
+    grid-template-columns: clamp(250px, 24vw, 320px) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
     width: 100%;
-    height: 500px;
+    max-width: 1500px;
+    margin-bottom: 1rem;
+    font-family: "Barlow", "Trebuchet MS", sans-serif;
+}
+
+.wx-layout.obs-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.wx-layout.obs-collapsed .obs-panel {
+    display: none;
+}
+
+.obs-panel {
+    background: linear-gradient(180deg, var(--panel-bg), #ffffff 60%);
+    border: 2px solid var(--panel-border);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(9, 61, 82, 0.12);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.panel-header h2 {
+    margin: 0;
+    color: #36454f;
+    font-family: "Barlow Condensed", "Trebuchet MS", sans-serif;
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.panel-subtitle {
+    margin: 4px 0 0;
+    color: #58717e;
+    font-size: 0.92rem;
+}
+
+.station-select {
+    background: #ffffff;
+    border: 1px solid #d6e4ec;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 10px;
 }
 
-.data-container {
-    flex: 1;
-    padding: 20px;
-    background-color: #f9f9f9;
-    border-left: 1px solid #ddd;
-    overflow-y: auto;
+.station-select label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #374d59;
 }
 
-/* Add pulsing animation for the selected station */
-@keyframes pulse {
-    0% {
-        transform: scale(1);
-        opacity: 1;
-    }
-    50% {
-        transform: scale(1.2);
-        opacity: 0.7;
-    }
-    100% {
-        transform: scale(1);
-        opacity: 1;
-    }
+.station-select select {
+    width: 100%;
+    border: 1px solid #90adbc;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 6px 8px;
+    font-size: 0.95rem;
 }
 
 .weather-container {
-    display: grid; /* Use grid layout for compact arrangement */
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); /* Slightly wider columns */
-    gap: 12px; /* Increased spacing between items */
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 10;
-    background-color: rgba(255, 255, 255, 0.95); /* Slightly more opaque */
-    padding: 12px; /* Increased padding */
-    border-radius: 10px; /* Larger border radius */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* Enhanced shadow */
-    border: 1px solid rgba(0, 0, 0, 0.1); /* Subtle border */
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
 }
 
 .weather-item {
-    padding: 8px; /* Slightly increased padding */
+    padding: 10px;
     background-color: #ffffff;
-    border: 1px solid #ddd;
-    border-radius: 6px; /* Slightly larger border radius */
-    text-align: center;
-    font-size: 0.95em; /* Slightly larger font size for better readability */
-    font-weight: 500; /* Medium font weight */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: background-color 0.2s ease; /* Smooth transition for hover effects */
+    border: 1px solid #c6d9e4;
+    border-left: 6px solid #2e8fb2;
+    border-radius: 6px;
+    font-size: 0.97rem;
+    font-weight: 600;
+    color: #1f323d;
 }
 
-.weather-item:hover {
-    background-color: #f8f9fa;
+.status-message {
+    background: var(--status-bg);
+    border: 1px solid var(--status-border);
+    border-radius: 6px;
+    color: #354214;
+    font-size: 0.88rem;
+    padding: 8px;
+}
+
+.legend-panel {
+    border: 1px solid #cfdee7;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px;
+}
+
+.legend-panel h3 {
+    margin: 0 0 8px;
+    color: var(--panel-heading);
+    font-family: "Barlow Condensed", "Trebuchet MS", sans-serif;
+    font-size: 1.3rem;
+}
+
+.legend-list {
+    display: grid;
+    gap: 4px;
+    font-size: 0.9rem;
+}
+
+.legend-gradient {
+    height: 12px;
+    border-radius: 999px;
+    border: 1px solid #a8bbc7;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg,
+        #313695 0%,
+        #4575b4 10%,
+        #74add1 20%,
+        #abd9e9 30%,
+        #e0f3f8 40%,
+        #fee090 55%,
+        #fdae61 70%,
+        #f46d43 80%,
+        #d73027 90%,
+        #a50026 100%);
+}
+
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-swatch {
+    width: 14px;
+    height: 14px;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    border-radius: 2px;
+    flex: 0 0 14px;
+}
+
+.map-stage {
+    border: 2px solid var(--stage-border);
+    border-radius: 10px;
+    background: linear-gradient(180deg, var(--stage-bg), #ffffff 70%);
+    box-shadow: 0 6px 20px rgba(19, 80, 102, 0.12);
+    padding: 10px;
+    min-width: 0;
+    position: relative;
+}
+
+.map-toolbar {
+    background: #ffffff;
+    border: 1px solid #9fc6d8;
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 10px;
+}
+
+.map-title {
+    margin: 0 0 8px;
+    font-family: "Barlow Condensed", "Trebuchet MS", sans-serif;
+    font-size: 2.05rem;
+    line-height: 1;
+    color: #424b52;
+}
+
+.toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.variable-tabs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    border: 1px solid #becad1;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f5f8fa;
+}
+
+.variable-tab {
+    border: 0;
+    background: #f5f8fa;
+    color: #2e3b43;
+    font-family: "Barlow", "Trebuchet MS", sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 8px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.variable-tab + .variable-tab {
+    border-left: 1px solid #d2dde3;
+}
+
+.variable-tab.is-active {
+    background: #ffffff;
+    font-weight: 700;
+}
+
+.toolbar-selects {
+    display: grid;
+    gap: 6px;
+}
+
+.control-select {
+    min-width: 170px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--olive);
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 7px 10px;
+}
+
+.control-select-variable {
+    display: none;
+}
+
+.control-select:focus {
+    outline: 2px solid #293047;
+    outline-offset: 1px;
+}
+
+.map-container {
+    width: 100%;
+    height: 560px;
+    border: 1px solid #98c3d5;
+    border-radius: 8px;
+    background-color: #dbe6ea;
+}
+
+.forecast-row {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding: 8px 0 2px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.tool-rail {
+    position: absolute;
+    right: 16px;
+    top: 230px;
+    display: grid;
+    gap: 8px;
+    z-index: 12;
+}
+
+.rail-btn {
+    width: 44px;
+    height: 44px;
+    border: 1px solid #6e7608;
+    border-radius: 6px;
+    background: linear-gradient(180deg, #aab62a, var(--olive-dark));
+    color: #ffffff;
+    font-size: 1.15rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22);
+}
+
+.rail-btn.is-active {
+    outline: 3px solid #17202f;
+    outline-offset: 1px;
+}
+
+.rail-btn-alert {
+    background: linear-gradient(180deg, #f3666a, #da2b31);
+    border-color: #b42025;
 }
 
 /* Tooltip styling */
 .tooltip {
     position: absolute;
     background-color: rgba(0, 0, 0, 0.85);
-    color: white;
+    color: #ffffff;
     padding: 8px 12px;
     border-radius: 6px;
     font-size: 0.9em;
     font-weight: 500;
     pointer-events: none;
-    z-index: 15;
+    z-index: 50;
     display: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Highlight animation for the selected station */
-.selected-station {
-    animation: pulse 1.5s infinite;
-}
-
-.weather-item h3 {
-    margin-bottom: 10px;
-    font-size: 1.2em;
-    color: #333;
-}
-
-.weather-item p {
-    font-size: 1.5em;
-    color: #555;
-}
-
-/* Responsive design improvements */
-@media (max-width: 768px) {
-    .weather-container {
-        position: static;
-        margin-bottom: 10px;
-        grid-template-columns: repeat(2, 1fr); /* 2 columns on mobile */
+@media (max-width: 1280px) {
+    .wx-layout {
+        grid-template-columns: 1fr;
     }
-    
-    .weather-item {
-        font-size: 0.85em;
-        padding: 6px;
+
+    .map-stage {
+        min-width: 0;
     }
-    
+
+    .toolbar-row {
+        align-items: stretch;
+    }
+
+    .variable-tabs {
+        width: 100%;
+    }
+
+    .variable-tab {
+        flex: 1 1 auto;
+        text-align: center;
+    }
+}
+
+@media (max-width: 1024px) {
+
     .map-container {
-        height: 400px;
+        height: 500px;
     }
-    
-    #map {
-        height: 400px;
+
+    .weather-container {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tool-rail {
+        top: 190px;
     }
 }
 
-@media (max-width: 480px) {
-    .weather-container {
-        grid-template-columns: 1fr; /* Single column on very small screens */
-        gap: 8px;
-        padding: 8px;
+@media (max-width: 640px) {
+    .panel-header h2 {
+        font-size: 1.65rem;
     }
-    
-    .weather-item {
-        font-size: 0.8em;
-        padding: 5px;
+
+    .weather-container {
+        grid-template-columns: 1fr;
+    }
+
+    .map-container {
+        height: 420px;
+    }
+
+    .map-title {
+        font-size: 1.65rem;
+    }
+
+    .variable-tabs {
+        display: none;
+    }
+
+    .control-select-variable {
+        display: block;
+    }
+
+    .control-select {
+        min-width: 100%;
+        width: 100%;
+    }
+
+    .toolbar-selects {
+        width: 100%;
+    }
+
+    .tool-rail {
+        right: 12px;
+        top: 206px;
+    }
+
+    .rail-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 1rem;
     }
 }
