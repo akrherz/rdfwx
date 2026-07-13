@@ -1,8 +1,50 @@
-const GEOJSON_URI = "https://mesonet.agron.iastate.edu/api/1/currents.geojson?network=ISUSM";
+const GEOJSON_URI = "https://mesonet.agron.iastate.edu/geojson/agclimate.py";
 
 let map = null;
 let highlightedFeature = null; // Track the currently highlighted feature
 let latestGeoJSON = null; // store last fetched GeoJSON for fallbacks
+let stationLayer = null;
+let interactionsEnabled = false;
+let currentVariable = 'tmpf';
+let currentUnits = 'f';
+let baseTileLayer = null;
+let baseLayerMode = 'osm';
+let showRecentOnly = true;
+
+const VARIABLE_META = {
+    tmpf: { title: 'Air Temperature', legendTitle: 'Temperature Legend' },
+    dwpf: { title: 'Dew Point', legendTitle: 'Dew Point Legend' },
+    relh: { title: 'Relative Humidity', legendTitle: 'Humidity Legend' },
+    sknt: { title: 'Wind Speed', legendTitle: 'Wind Speed Legend' },
+    pday: { title: 'Daily Rainfall', legendTitle: 'Rainfall Legend' },
+    cci: { title: 'Adult Cattle Comfort Index', legendTitle: 'Cattle Comfort Index Legend' },
+};
+
+const LEGEND_CONTENT = {
+    tmpf: [
+        ['#313695', '<= 0 F'], ['#4575b4', '1-10 F'], ['#74add1', '11-20 F'],
+        ['#abd9e9', '21-30 F'], ['#e0f3f8', '31-40 F'], ['#fee090', '41-50 F'],
+        ['#fdae61', '51-60 F'], ['#f46d43', '61-70 F'], ['#d73027', '71-80 F'], ['#a50026', '> 80 F'],
+    ],
+    dwpf: [
+        ['#313695', '<= 0 F'], ['#4575b4', '1-10 F'], ['#74add1', '11-20 F'],
+        ['#abd9e9', '21-30 F'], ['#e0f3f8', '31-40 F'], ['#fee090', '41-50 F'],
+        ['#fdae61', '51-60 F'], ['#f46d43', '61-70 F'], ['#d73027', '71-80 F'], ['#a50026', '> 80 F'],
+    ],
+    relh: [
+        ['#f2f5c8', '< 20%'], ['#d8ebb5', '20-39%'], ['#a9d7c6', '40-59%'], ['#71b5c9', '60-79%'], ['#2c7da0', '>= 80%'],
+    ],
+    sknt: [
+        ['#e9f7ef', '< 5 mph'], ['#b8e0d1', '5-9 mph'], ['#78c6a3', '10-19 mph'], ['#4ea37c', '20-29 mph'], ['#2d6a4f', '>= 30 mph'],
+    ],
+    pday: [
+        ['#f3f5f7', '< 0.01 in'], ['#dceef8', '0.01-0.09 in'], ['#9bc8e4', '0.10-0.49 in'], ['#5a9fd1', '0.50-0.99 in'], ['#2367ad', '>= 1.00 in'],
+    ],
+    cci: [
+        ['#355ebd', '<= -40'], ['#4d82ce', '-39 to -15'], ['#76aed8', '-14 to 10'], ['#b7d6de', '11 to 35'],
+        ['#ecd580', '36 to 60'], ['#e29a4d', '61 to 85'], ['#d14a31', '86 to 110'], ['#8f111f', '> 110'],
+    ],
+};
 
 // Utility function to convert knots to MPH and round to integer
 function knotsToMph(knots) {
@@ -30,19 +72,138 @@ function formatValue(value, unit = '', decimals = 0) {
     return decimals > 0 ? `${value.toFixed(decimals)}${unit}` : `${Math.round(value)}${unit}`;
 }
 
+function parseNumeric(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed === '' || trimmed.toUpperCase() === 'M') {
+            return null;
+        }
+        const parsed = Number.parseFloat(trimmed.replace('%', ''));
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+}
+
+function getStationCodeFromRawFeature(feature) {
+    if (!feature) {
+        return null;
+    }
+    const props = feature.properties || {};
+    return props.station || feature.id || null;
+}
+
+function getStationCodeFromOlFeature(feature) {
+    if (!feature) {
+        return null;
+    }
+    const stationProp = feature.get('station');
+    const featureId = feature.getId && feature.getId();
+    return stationProp || featureId || null;
+}
+
+function getWindDisplayData(props) {
+    const drct = parseNumeric(props.drct);
+    const sknt = parseNumeric(props.sknt);
+    if (sknt !== null) {
+        return {
+            speed: convertWind(sknt),
+            direction: drct === null ? '' : degreesToCardinal(drct),
+        };
+    }
+
+    if (typeof props.wind === 'string') {
+        const match = props.wind.trim().match(/^([NSEW]{1,3})@(-?\d+(?:\.\d+)?)$/i);
+        if (match) {
+            const speedMph = Number.parseFloat(match[2]);
+            const speed = currentUnits === 'c' ? speedMph * 1.60934 : speedMph;
+            return {
+                speed,
+                direction: match[1].toUpperCase(),
+            };
+        }
+    }
+
+    return {
+        speed: null,
+        direction: '',
+    };
+}
+
+function convertTemperature(fahrenheit) {
+    const value = parseNumeric(fahrenheit);
+    if (value === null) {
+        return null;
+    }
+    if (currentUnits === 'c') {
+        return (value - 32.0) * (5.0 / 9.0);
+    }
+    return value;
+}
+
+function convertRain(inches) {
+    const value = parseNumeric(inches);
+    if (value === null) {
+        return null;
+    }
+    if (currentUnits === 'c') {
+        return value * 25.4;
+    }
+    return value;
+}
+
+function convertWind(knots) {
+    const value = parseNumeric(knots);
+    if (value === null) {
+        return null;
+    }
+    const mph = value * 1.15078;
+    if (currentUnits === 'c') {
+        return mph * 1.60934;
+    }
+    return mph;
+}
+
+function getTemperatureUnitLabel() {
+    return currentUnits === 'c' ? '°C' : '°F';
+}
+
+function getRainUnitLabel() {
+    return currentUnits === 'c' ? ' mm' : ' in';
+}
+
+function getWindUnitLabel() {
+    return currentUnits === 'c' ? ' km/h' : ' mph';
+}
+
 function update_page(data) {
     const site = $("#site").val();
-    const feature = data.features.find(f => f.properties.station === site);
+    const feature = data.features.find(f => getStationCodeFromRawFeature(f) === site);
     if (feature) {
         const props = feature.properties;
-        $("#airtemp").text(`Air Temp: ${formatValue(props.tmpf, '°F')}`);
-        $("#rain").text(`Rainfall: ${formatValue(props.pday, ' in', 2)}`);
-        $("#humidity").text(`Humidity: ${formatValue(props.relh, '%')}`);
+        const airTemp = convertTemperature(props.tmpf);
+        const rainfall = convertRain(props.pday);
+        const windData = getWindDisplayData(props);
+        const cciValue = props.cci;
+
+        $("#airtemp").text(`Air Temp: ${formatValue(airTemp, getTemperatureUnitLabel())}`);
+        $("#rain").text(`Rainfall: ${formatValue(rainfall, getRainUnitLabel(), 2)}`);
+        if (currentVariable === 'cci') {
+            $("#humidity").text(`CCI: ${formatValue(cciValue)}`);
+        } else {
+            const relhValue = parseNumeric(props.relh ?? props.rh);
+            $("#humidity").text(`Humidity: ${formatValue(relhValue, '%')}`);
+        }
         
         // Enhanced wind display with direction
-        const windSpeed = knotsToMph(props.sknt);
-        const windDir = degreesToCardinal(props.drct);
-        const windText = windDir ? `Wind: ${windSpeed} mph ${windDir}` : `Wind Speed: ${windSpeed} mph`;
+        const windSpeed = windData.speed === null ? 'N/A' : Math.round(windData.speed);
+        const windDir = windData.direction;
+        const windText = windDir ? `Wind: ${windSpeed}${getWindUnitLabel()} ${windDir}` : `Wind Speed: ${windSpeed}${getWindUnitLabel()}`;
         $("#wind").text(windText);
         
         // If the GeoJSON feature has coordinates (standard GeoJSON: [lon, lat])
@@ -67,6 +228,9 @@ function update_page(data) {
 
 function updateStatusMessage() {
     const statusElement = document.getElementById('status-message');
+    if (!statusElement) {
+        return;
+    }
     const now = new Date();
     statusElement.textContent = `Last updated: ${now.toLocaleTimeString()}`;
     statusElement.style.color = '#333'; // Reset color on successful update
@@ -86,8 +250,10 @@ function load_geojson() {
         },
         error: (xhr, status, error) => {
             const statusElement = document.getElementById('status-message');
-            statusElement.textContent = `Failed to fetch data: ${error}`;
-            statusElement.style.color = '#900';
+            if (statusElement) {
+                statusElement.textContent = `Failed to fetch data: ${error}`;
+                statusElement.style.color = '#900';
+            }
             
             // Update weather displays to show error state
             $("#airtemp").text("Air Temp: Error");
@@ -128,20 +294,31 @@ function highlightSelectedStation(feature) {
 
 function update_dropdown_and_page(feature) {
     const props = feature.getProperties();
-    const station = props.station;
+    const station = getStationCodeFromOlFeature(feature);
 
     // Update the dropdown menu
-    $("#site").val(station);
+    if (station) {
+        $("#site").val(station);
+    }
 
     // Update the displayed data
-    $("#airtemp").text(`Air Temp: ${formatValue(props.tmpf, '°F')}`);
-    $("#rain").text(`Rainfall: ${formatValue(props.pday, ' in', 2)}`);
-    $("#humidity").text(`Humidity: ${formatValue(props.relh, '%')}`);
+    const airTemp = convertTemperature(props.tmpf);
+    const rainfall = convertRain(props.pday);
+    const windData = getWindDisplayData(props);
+
+    $("#airtemp").text(`Air Temp: ${formatValue(airTemp, getTemperatureUnitLabel())}`);
+    $("#rain").text(`Rainfall: ${formatValue(rainfall, getRainUnitLabel(), 2)}`);
+    if (currentVariable === 'cci') {
+        $("#humidity").text(`CCI: ${formatValue(props.cci)}`);
+    } else {
+        const relhValue = parseNumeric(props.relh ?? props.rh);
+        $("#humidity").text(`Humidity: ${formatValue(relhValue, '%')}`);
+    }
     
     // Enhanced wind display with direction
-    const windSpeed = knotsToMph(props.sknt);
-    const windDir = degreesToCardinal(props.drct);
-    const windText = windDir ? `Wind: ${windSpeed} mph ${windDir}` : `Wind Speed: ${windSpeed} mph`;
+    const windSpeed = windData.speed === null ? 'N/A' : Math.round(windData.speed);
+    const windDir = windData.direction;
+    const windText = windDir ? `Wind: ${windSpeed}${getWindUnitLabel()} ${windDir}` : `Wind Speed: ${windSpeed}${getWindUnitLabel()}`;
     $("#wind").text(windText);
 
     // Highlight the selected station on the map
@@ -175,23 +352,21 @@ function update_dropdown_and_page(feature) {
 // Ensure a forecast container exists below the map and minimal styles for the forecast row
 function ensureForecastContainerExists() {
     if (!document.getElementById('nws-forecast-row')) {
-        const mapEl = document.getElementById('map');
+        const mapStage = document.querySelector('.map-stage');
         const container = document.createElement('div');
         container.id = 'nws-forecast-row';
+        container.className = 'forecast-row';
         container.style.display = 'flex';
         container.style.flexWrap = 'nowrap';
         container.style.overflowX = 'auto';
         container.style.gap = '8px';
-        container.style.padding = '8px';
-        container.style.background = 'rgba(255,255,255,0.95)';
-        container.style.borderTop = '1px solid #ccc';
+        container.style.padding = '8px 0 2px';
         container.style.boxSizing = 'border-box';
         container.style.width = '100%';
         container.setAttribute('aria-live', 'polite');
 
-        // Place the forecast row after the map element
-        if (mapEl && mapEl.parentNode) {
-            mapEl.parentNode.insertBefore(container, mapEl.nextSibling);
+        if (mapStage) {
+            mapStage.appendChild(container);
         } else {
             document.body.appendChild(container);
         }
@@ -204,7 +379,7 @@ function addForecastStyles() {
     const style = document.createElement('style');
     style.id = 'nws-forecast-styles';
     style.textContent = `
-        #nws-forecast-row .nws-card { min-width: 200px; max-width: 320px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:8px; box-shadow:0 1px 2px rgba(0,0,0,0.08); font-family:Arial,Helvetica,sans-serif; }
+        #nws-forecast-row .nws-card { min-width: 200px; max-width: 320px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:8px; box-shadow:0 1px 2px rgba(0,0,0,0.08); font-family:Barlow,"Trebuchet MS",sans-serif; }
         #nws-forecast-row .nws-card header { display:flex; justify-content:space-between; align-items:center; }
         #nws-forecast-row .nws-card .nws-icon img { width:64px; height:64px; object-fit:contain; }
         #nws-forecast-row .nws-card .nws-short { font-weight:600; margin-top:6px; }
@@ -283,11 +458,7 @@ function showTooltip(feature, coordinate) {
 
     const tooltipElement = document.getElementById('tooltip');
     const props = feature.getProperties();
-    const windSpeedMph = knotsToMph(props.sknt);
-    const windDir = degreesToCardinal(props.drct);
-    const tempDisplay = formatValue(props.tmpf, '°F');
-    const windDisplay = windDir ? `${windSpeedMph} mph ${windDir}` : `${windSpeedMph} mph`;
-    tooltipElement.textContent = `${props.station}: ${tempDisplay}, ${windDisplay}`;
+    tooltipElement.textContent = `${props.station}: ${getActiveVariableLabel(props)}`;
     tooltipElement.style.left = `${coordinate[0]}px`;
     tooltipElement.style.top = `${coordinate[1]}px`;
     tooltipElement.style.display = 'block';
@@ -305,7 +476,7 @@ function enable_map_interaction(vectorLayer) {
         const features = map.getFeaturesAtPixel(event.pixel);
         if (features && features.length > 0) {
             const feature = features[0];
-            if (feature.getProperties().station) {
+            if (getStationCodeFromOlFeature(feature)) {
                 update_dropdown_and_page(feature);
             }
         }
@@ -315,8 +486,8 @@ function enable_map_interaction(vectorLayer) {
         const features = map.getFeaturesAtPixel(event.pixel);
         if (features && features.length > 0) {
             const feature = features[0];
-            if (feature.getProperties().station) {
-                showTooltip(feature, event.coordinate);
+            if (getStationCodeFromOlFeature(feature)) {
+                showTooltip(feature, event.pixel);
             }
         } else {
             hideTooltip();
@@ -335,6 +506,77 @@ function getTemperatureColor(temp) {
     if (temp <= 70) return '#f46d43'; // Red-orange
     if (temp <= 80) return '#d73027'; // Red
     return '#a50026'; // Dark red
+}
+
+function getVariableValue(feature, variable) {
+    const rawValue = feature.get(variable);
+    const value = parseNumeric(rawValue);
+    if (value === null) {
+        return null;
+    }
+    if (variable === 'tmpf' || variable === 'dwpf') {
+        return convertTemperature(value);
+    }
+    if (variable === 'sknt') {
+        return convertWind(value);
+    }
+    if (variable === 'pday') {
+        return convertRain(value);
+    }
+    if (variable === 'cci') {
+        return value;
+    }
+    return value;
+}
+
+function getCciColor(value) {
+    if (value <= -40) return '#355ebd';
+    if (value <= -15) return '#4d82ce';
+    if (value <= 10) return '#76aed8';
+    if (value <= 35) return '#b7d6de';
+    if (value <= 60) return '#ecd580';
+    if (value <= 85) return '#e29a4d';
+    if (value <= 110) return '#d14a31';
+    return '#8f111f';
+}
+
+function getVariableColor(value, variable) {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+        return '#9ba7ad';
+    }
+    if (variable === 'tmpf' || variable === 'dwpf') {
+        const tempF = currentUnits === 'c' ? ((value * 9.0) / 5.0) + 32.0 : value;
+        return getTemperatureColor(tempF);
+    }
+    if (variable === 'relh') {
+        if (value < 20) return '#f2f5c8';
+        if (value < 40) return '#d8ebb5';
+        if (value < 60) return '#a9d7c6';
+        if (value < 80) return '#71b5c9';
+        return '#2c7da0';
+    }
+    if (variable === 'sknt') {
+        if (value < (currentUnits === 'c' ? 8 : 5)) return '#e9f7ef';
+        if (value < (currentUnits === 'c' ? 16 : 10)) return '#b8e0d1';
+        if (value < (currentUnits === 'c' ? 32 : 20)) return '#78c6a3';
+        if (value < (currentUnits === 'c' ? 48 : 30)) return '#4ea37c';
+        return '#2d6a4f';
+    }
+    if (variable === 'pday') {
+        const drizzle = currentUnits === 'c' ? 0.25 : 0.01;
+        const light = currentUnits === 'c' ? 2.5 : 0.1;
+        const moderate = currentUnits === 'c' ? 12.7 : 0.5;
+        const heavy = currentUnits === 'c' ? 25.4 : 1.0;
+        if (value < drizzle) return '#f3f5f7';
+        if (value < light) return '#dceef8';
+        if (value < moderate) return '#9bc8e4';
+        if (value < heavy) return '#5a9fd1';
+        return '#2367ad';
+    }
+    if (variable === 'cci') {
+        return getCciColor(value);
+    }
+    return '#4575b4';
 }
 
 function createWindArrowStyle(speed, direction) {
@@ -357,7 +599,11 @@ function createWindArrowStyle(speed, direction) {
 }
 
 function createCombinedStyle(temp, speed, direction) {
-    if (temp === null || speed === null || direction === null) {
+    const tempValue = parseNumeric(temp);
+    const speedValue = parseNumeric(speed);
+    const directionValue = parseNumeric(direction);
+
+    if (tempValue === null) {
         return [
             new ol.style.Style({
                 text: new ol.style.Text({
@@ -370,27 +616,35 @@ function createCombinedStyle(temp, speed, direction) {
         ];
     }
 
-    const windArrowStyle = createWindArrowStyle(speed, direction);
-
     return [
         new ol.style.Style({
             image: new ol.style.Circle({
                 radius: 6.25, // Increased radius by 25%
-                fill: new ol.style.Fill({ color: getTemperatureColor(temp) }),
+                fill: new ol.style.Fill({ color: getTemperatureColor(tempValue) }),
                 stroke: new ol.style.Stroke({ color: 'black', width: 1.25 }), // Adjusted stroke width
             }),
             zIndex: 2, // Ensure the circle is rendered on top of the arrow
         }),
-        windArrowStyle,
+        ...(speedValue === null || directionValue === null ? [] : [createWindArrowStyle(speedValue, directionValue)]),
     ];
 }
 
 function filterRecentData(features) {
+    if (!showRecentOnly) {
+        return features;
+    }
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000); // One hour ago
 
     return features.filter((feature) => {
-        const utcValid = new Date(feature.get('utc_valid'));
-        return utcValid >= oneHourAgo; // Only include data within the last hour
+        const ts = feature.get('utc_valid') || feature.get('valid_utc');
+        if (!ts) {
+            return true;
+        }
+        const validDate = new Date(ts);
+        if (Number.isNaN(validDate.getTime())) {
+            return true;
+        }
+        return validDate >= oneHourAgo; // Only include data within the last hour
     });
 }
 
@@ -412,38 +666,301 @@ function update_map(data) {
             const speed = feature.get('sknt');
             const direction = feature.get('drct');
 
+            if (currentVariable !== 'tmpf') {
+                const value = getVariableValue(feature, currentVariable);
+                if (value === null) {
+                    return createCombinedStyle(temp, speed, direction);
+                }
+                return [
+                    new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 6.25,
+                            fill: new ol.style.Fill({ color: getVariableColor(value, currentVariable) }),
+                            stroke: new ol.style.Stroke({ color: 'black', width: 1.25 }),
+                        }),
+                        zIndex: 2,
+                    }),
+                ];
+            }
             return createCombinedStyle(temp, speed, direction);
         },
     });
 
-    map.addLayer(vectorLayer);
-    enable_map_interaction(vectorLayer);
+    if (stationLayer) {
+        map.removeLayer(stationLayer);
+    }
+    stationLayer = vectorLayer;
+    map.addLayer(stationLayer);
+
+    if (!interactionsEnabled) {
+        enable_map_interaction(stationLayer);
+        interactionsEnabled = true;
+    }
 }
 
 function addTemperatureLegend() {
-    const legend = document.createElement('div');
-    legend.id = 'temperature-legend';
-    legend.style.position = 'absolute';
-    legend.style.right = '10px';
-    legend.style.bottom = '10px'; // Adjusted to display within the map space
-    legend.style.backgroundColor = 'rgba(255, 255, 255, 0.8)'; // Semi-transparent background
-    legend.style.padding = '5px';
-    legend.style.border = '1px solid black';
-    legend.style.fontSize = '12px'; // Smaller font size to save space
-    legend.innerHTML = `
-        <h4 style="margin: 0; font-size: 14px;">Temperature (°F)</h4>
-        <div><span style="background-color: #313695; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> ≤ 0</div>
-        <div><span style="background-color: #4575b4; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 1-10</div>
-        <div><span style="background-color: #74add1; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 11-20</div>
-        <div><span style="background-color: #abd9e9; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 21-30</div>
-        <div><span style="background-color: #e0f3f8; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 31-40</div>
-        <div><span style="background-color: #fee090; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 41-50</div>
-        <div><span style="background-color: #fdae61; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 51-60</div>
-        <div><span style="background-color: #f46d43; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 61-70</div>
-        <div><span style="background-color: #d73027; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 71-80</div>
-        <div><span style="background-color: #a50026; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> > 80</div>
-    `;
-    document.getElementById('map').appendChild(legend); // Append to the map container
+    const legendPanel = document.getElementById('legend-panel');
+    const legendHeading = document.querySelector('.legend-panel h3');
+    if (legendHeading) {
+        legendHeading.textContent = VARIABLE_META[currentVariable]?.legendTitle || 'Variable Legend';
+    }
+    if (!legendPanel) {
+        return;
+    }
+    const rows = getLegendRows(currentVariable);
+    const gradient = (currentVariable === 'tmpf' || currentVariable === 'dwpf' || currentVariable === 'cci')
+        ? '<div class="legend-gradient" aria-hidden="true"></div>'
+        : '';
+    const legendRows = rows
+        .map(([color, label]) => `<div class="legend-row"><span class="legend-swatch" style="background-color:${color}"></span> ${label}</div>`)
+        .join('');
+
+    legendPanel.innerHTML = `${gradient}${legendRows}`;
+}
+
+function getLegendRows(variable) {
+    if (variable === 'tmpf' || variable === 'dwpf') {
+        if (currentUnits === 'c') {
+            return [
+                ['#313695', '<= -18 C'], ['#4575b4', '-17 to -12 C'], ['#74add1', '-11 to -7 C'],
+                ['#abd9e9', '-6 to -1 C'], ['#e0f3f8', '0 to 4 C'], ['#fee090', '5 to 10 C'],
+                ['#fdae61', '11 to 16 C'], ['#f46d43', '17 to 21 C'], ['#d73027', '22 to 27 C'], ['#a50026', '> 27 C'],
+            ];
+        }
+        return [
+            ['#313695', '<= 0 F'], ['#4575b4', '1-10 F'], ['#74add1', '11-20 F'],
+            ['#abd9e9', '21-30 F'], ['#e0f3f8', '31-40 F'], ['#fee090', '41-50 F'],
+            ['#fdae61', '51-60 F'], ['#f46d43', '61-70 F'], ['#d73027', '71-80 F'], ['#a50026', '> 80 F'],
+        ];
+    }
+    if (variable === 'relh') {
+        return [
+            ['#f2f5c8', '< 20%'], ['#d8ebb5', '20-39%'], ['#a9d7c6', '40-59%'], ['#71b5c9', '60-79%'], ['#2c7da0', '>= 80%'],
+        ];
+    }
+    if (variable === 'sknt') {
+        if (currentUnits === 'c') {
+            return [
+                ['#e9f7ef', '< 8 km/h'], ['#b8e0d1', '8-15 km/h'], ['#78c6a3', '16-31 km/h'], ['#4ea37c', '32-47 km/h'], ['#2d6a4f', '>= 48 km/h'],
+            ];
+        }
+        return [
+            ['#e9f7ef', '< 5 mph'], ['#b8e0d1', '5-9 mph'], ['#78c6a3', '10-19 mph'], ['#4ea37c', '20-29 mph'], ['#2d6a4f', '>= 30 mph'],
+        ];
+    }
+    if (variable === 'pday') {
+        if (currentUnits === 'c') {
+            return [
+                ['#f3f5f7', '< 0.25 mm'], ['#dceef8', '0.25-2.49 mm'], ['#9bc8e4', '2.50-12.69 mm'], ['#5a9fd1', '12.70-25.39 mm'], ['#2367ad', '>= 25.40 mm'],
+            ];
+        }
+        return [
+            ['#f3f5f7', '< 0.01 in'], ['#dceef8', '0.01-0.09 in'], ['#9bc8e4', '0.10-0.49 in'], ['#5a9fd1', '0.50-0.99 in'], ['#2367ad', '>= 1.00 in'],
+        ];
+    }
+    if (variable === 'cci') {
+        return [
+            ['#355ebd', '<= -40'], ['#4d82ce', '-39 to -15'], ['#76aed8', '-14 to 10'], ['#b7d6de', '11 to 35'],
+            ['#ecd580', '36 to 60'], ['#e29a4d', '61 to 85'], ['#d14a31', '86 to 110'], ['#8f111f', '> 110'],
+        ];
+    }
+    return LEGEND_CONTENT.tmpf;
+}
+
+function getActiveVariableLabel(props) {
+    const value = props[currentVariable];
+    if (value === null || value === undefined || Number.isNaN(value)) {
+        return `${(VARIABLE_META[currentVariable]?.title || 'Value')}: N/A`;
+    }
+    if (currentVariable === 'tmpf' || currentVariable === 'dwpf') {
+        return `${VARIABLE_META[currentVariable].title}: ${formatValue(convertTemperature(value), getTemperatureUnitLabel())}`;
+    }
+    if (currentVariable === 'sknt') {
+        return `${VARIABLE_META[currentVariable].title}: ${formatValue(convertWind(value), getWindUnitLabel())}`;
+    }
+    if (currentVariable === 'pday') {
+        return `${VARIABLE_META[currentVariable].title}: ${formatValue(convertRain(value), getRainUnitLabel(), 2)}`;
+    }
+    if (currentVariable === 'relh') {
+        return `${VARIABLE_META[currentVariable].title}: ${formatValue(value, '%')}`;
+    }
+    if (currentVariable === 'cci') {
+        return `${VARIABLE_META[currentVariable].title}: ${formatValue(value)}`;
+    }
+    return `${VARIABLE_META[currentVariable]?.title || 'Value'}: ${formatValue(value)}`;
+}
+
+function syncVariableUi(variable) {
+    const mapTitle = document.querySelector('.map-title');
+    if (mapTitle) {
+        mapTitle.textContent = `${VARIABLE_META[variable]?.title || 'Variable'} - Current`;
+    }
+    document.querySelectorAll('.variable-tab').forEach((tab) => {
+        tab.classList.toggle('is-active', tab.dataset.variable === variable);
+    });
+    const select = document.getElementById('display-variable');
+    if (select) {
+        select.value = variable;
+    }
+}
+
+function setCurrentVariable(variable) {
+    if (!VARIABLE_META[variable]) {
+        return;
+    }
+    currentVariable = variable;
+    syncVariableUi(variable);
+    addTemperatureLegend();
+    if (latestGeoJSON) {
+        update_map(latestGeoJSON);
+    }
+}
+
+function setCurrentUnits(units) {
+    if (units !== 'f' && units !== 'c') {
+        return;
+    }
+    currentUnits = units;
+    const unitSelect = document.getElementById('display-units');
+    if (unitSelect) {
+        unitSelect.value = units;
+    }
+    addTemperatureLegend();
+    if (latestGeoJSON) {
+        update_page(latestGeoJSON);
+        update_map(latestGeoJSON);
+    }
+}
+
+function setStatus(message) {
+    const statusElement = document.getElementById('status-message');
+    if (statusElement) {
+        statusElement.textContent = message;
+    }
+}
+
+function toggleBasemap() {
+    if (!baseTileLayer) {
+        return;
+    }
+    if (baseLayerMode === 'osm') {
+        baseTileLayer.setSource(new ol.source.XYZ({
+            url: 'https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png',
+            attributions: 'Map data: OpenStreetMap contributors, SRTM | Style: OpenTopoMap',
+        }));
+        baseLayerMode = 'topo';
+        setStatus('Basemap: Topographic');
+    } else {
+        baseTileLayer.setSource(new ol.source.OSM());
+        baseLayerMode = 'osm';
+        setStatus('Basemap: Standard OSM');
+    }
+    const layerBtn = document.getElementById('rail-layers');
+    if (layerBtn) {
+        layerBtn.classList.toggle('is-active', baseLayerMode === 'topo');
+    }
+}
+
+function toggleObservationPanel() {
+    const layout = document.querySelector('.wx-layout');
+    if (!layout) {
+        return;
+    }
+    layout.classList.toggle('obs-collapsed');
+    const panelBtn = document.getElementById('rail-panel-toggle');
+    if (panelBtn) {
+        panelBtn.classList.toggle('is-active', layout.classList.contains('obs-collapsed'));
+    }
+    setTimeout(() => {
+        if (map) {
+            map.updateSize();
+        }
+    }, 150);
+}
+
+function downloadLatestGeojson() {
+    if (!latestGeoJSON) {
+        setStatus('No data available to download yet.');
+        return;
+    }
+    const blob = new Blob([JSON.stringify(latestGeoJSON, null, 2)], { type: 'application/geo+json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rdfwx-current-${new Date().toISOString().slice(0, 16).replace(':', '')}.geojson`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus('Downloaded latest station data.');
+}
+
+function toggleStaleStations() {
+    showRecentOnly = !showRecentOnly;
+    const staleBtn = document.getElementById('rail-stale-toggle');
+    if (staleBtn) {
+        staleBtn.classList.toggle('is-active', !showRecentOnly);
+    }
+    if (latestGeoJSON) {
+        update_map(latestGeoJSON);
+    }
+    setStatus(showRecentOnly ? 'Showing observations from last hour.' : 'Showing all stations, including stale observations.');
+}
+
+function initToolbarUi() {
+    document.querySelectorAll('.variable-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            setCurrentVariable(tab.dataset.variable);
+        });
+    });
+
+    const variableSelect = document.getElementById('display-variable');
+    if (variableSelect) {
+        variableSelect.addEventListener('change', (event) => {
+            setCurrentVariable(event.target.value);
+        });
+    }
+
+    const unitsSelect = document.getElementById('display-units');
+    if (unitsSelect) {
+        unitsSelect.addEventListener('change', (event) => {
+            setCurrentUnits(event.target.value);
+        });
+    }
+
+    syncVariableUi(currentVariable);
+}
+
+function initToolRailUi() {
+    const layerBtn = document.getElementById('rail-layers');
+    if (layerBtn) {
+        layerBtn.addEventListener('click', toggleBasemap);
+    }
+    const panelBtn = document.getElementById('rail-panel-toggle');
+    if (panelBtn) {
+        panelBtn.addEventListener('click', toggleObservationPanel);
+    }
+    const downloadBtn = document.getElementById('rail-download');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', downloadLatestGeojson);
+    }
+    const staleBtn = document.getElementById('rail-stale-toggle');
+    if (staleBtn) {
+        staleBtn.addEventListener('click', toggleStaleStations);
+    }
+}
+
+function initVariableFromQueryString() {
+    const params = new URLSearchParams(window.location.search);
+    const mapParam = (params.get('map') || '').toLowerCase();
+    if (mapParam === 'stressadultcattlecomfortindex' || mapParam === 'cattlecomfortindex' || mapParam === 'cci') {
+        currentVariable = 'cci';
+        return;
+    }
+    const variableParam = (params.get('variable') || '').toLowerCase();
+    if (VARIABLE_META[variableParam]) {
+        currentVariable = variableParam;
+    }
 }
 
 // Function to get a cookie value by name
@@ -485,12 +1002,14 @@ $(document).ready(() => {
     });
 
     // Initialize the OpenLayers map
+    baseTileLayer = new ol.layer.Tile({
+        source: new ol.source.OSM(),
+    });
+
     map = new ol.Map({
         target: 'map',
         layers: [
-            new ol.layer.Tile({
-                source: new ol.source.OSM(),
-            }),
+            baseTileLayer,
         ],
         view: new ol.View({
             center: ol.proj.fromLonLat([-93.65, 42.02]), // Centered on Ames, Iowa
@@ -510,44 +1029,9 @@ $(document).ready(() => {
     // Ensure forecast container exists even before any selection
     ensureForecastContainerExists();
     addForecastStyles();
-
-    // Add status message element to the map container
-    const statusElement = document.createElement('div');
-    statusElement.id = 'status-message';
-    statusElement.style.position = 'absolute';
-    statusElement.style.left = '10px';
-    statusElement.style.bottom = '10px';
-    statusElement.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-    statusElement.style.padding = '5px';
-    statusElement.style.border = '1px solid black';
-    statusElement.style.fontSize = '12px';
-    statusElement.textContent = 'Fetching data...';
-    document.getElementById('map').appendChild(statusElement);
-
-    // Add temperature legend to the map container
-    const legend = document.createElement('div');
-    legend.id = 'temperature-legend';
-    legend.style.position = 'absolute';
-    legend.style.right = '10px';
-    legend.style.bottom = '10px';
-    legend.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-    legend.style.padding = '5px';
-    legend.style.border = '1px solid black';
-    legend.style.fontSize = '12px';
-    legend.innerHTML = `
-        <h4 style="margin: 0; font-size: 14px;">Temperature (°F)</h4>
-        <div><span style="background-color: #313695; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> ≤ 0</div>
-        <div><span style="background-color: #4575b4; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 1-10</div>
-        <div><span style="background-color: #74add1; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 11-20</div>
-        <div><span style="background-color: #abd9e9; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 21-30</div>
-        <div><span style="background-color: #e0f3f8; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 31-40</div>
-        <div><span style="background-color: #fee090; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 41-50</div>
-        <div><span style="background-color: #fdae61; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 51-60</div>
-        <div><span style="background-color: #f46d43; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 61-70</div>
-        <div><span style="background-color: #d73027; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> 71-80</div>
-        <div><span style="background-color: #a50026; width: 12px; height: 12px; display: inline-block;">&nbsp;</span> > 80</div>
-    `;
-    document.getElementById('map').appendChild(legend);
+    initVariableFromQueryString();
+    initToolbarUi();
+    initToolRailUi();
 
     addTemperatureLegend();
     startAutoRefresh(); // Start the automatic refresh

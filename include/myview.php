@@ -32,6 +32,12 @@ class MyView {
     public function __construct() {
             $this->template_dir =  dirname(__FILE__).'/templates/';  // skipcq
     }
+
+    /**
+     * Renders the template file with the variables set in the view.
+     * @param string $template_file The name of the template file to render.
+     * @throws Exception if the template file does not exist.
+     */
     public function render($template_file) {
         if (file_exists($this->template_dir.$template_file)) {
             include $this->template_dir.$template_file;
@@ -43,9 +49,21 @@ class MyView {
             );
         }
     }
+
+    /**
+     * Sets a variable in the view.
+     * @param string $name The name of the variable.
+     * @param mixed $value The value of the variable.
+     */
     public function __set($name, $value) {
         $this->vars[$name] = $value;
     }
+
+    /**
+     * Gets a variable from the view.
+     * @param string $name The name of the variable.
+     * @return mixed The value of the variable.
+     */
     public function __get($name) {
         return $this->vars[$name];
     }

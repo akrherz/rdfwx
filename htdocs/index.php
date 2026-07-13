@@ -1,20 +1,18 @@
 <?php
 require_once "../include/myview.php";
-$OL="10.6.1";
+$OL="10.9.0";
 $t = new MyView();
 $t->content = <<<EOM
 
-    <div id="map" class="map-container">
-        <div class="weather-container">
-            <div class="weather-item" id="airtemp">Air Temp: Loading...</div>
-            <div class="weather-item" id="rain">Rainfall: Loading...</div>
-            <div class="weather-item" id="humidity">Humidity: Loading...</div>
-            <div class="weather-item" id="wind">Wind Speed: Loading...</div>
-        </div>
-    </div>
-    <div class="data-container">
-        <div class="station-select">
-            <p>Select Site:
+    <div class="wx-layout">
+        <aside class="obs-panel" aria-label="Observation panel">
+            <div class="panel-header">
+                <h2>Current Observations</h2>
+                <p class="panel-subtitle">Research and Demonstration Farm Stations</p>
+            </div>
+
+            <div class="station-select">
+                <label for="site">Select Site</label>
                 <select id="site" class="form-control">
                     <option value="BOOI4">Ames - AEA ISU-RDF</option>
                     <option value="AMFI4">Ames - Finch Farm</option>
@@ -45,11 +43,71 @@ $t->content = <<<EOM
                     <option value="WMNI4">Wellman</option>
                     <option value="WTPI4">West Point</option>
                 </select>
-            </p>
+            </div>
+
+            <div class="weather-container" aria-live="polite">
+                <div class="weather-item" id="airtemp">Air Temp: Loading...</div>
+                <div class="weather-item" id="rain">Rainfall: Loading...</div>
+                <div class="weather-item" id="humidity">Humidity: Loading...</div>
+                <div class="weather-item" id="wind">Wind Speed: Loading...</div>
+            </div>
+
+            <div id="status-message" class="status-message">Fetching data...</div>
+
+            <section class="legend-panel">
+                <h3>Temperature Legend</h3>
+                <div id="legend-panel" class="legend-list"></div>
+            </section>
+        </aside>
+
+        <div class="map-stage">
+            <div class="map-toolbar" aria-label="Map controls">
+                <h2 class="map-title">Air Temperature - Current</h2>
+                <div class="toolbar-row">
+                    <div class="variable-tabs" role="tablist" aria-label="Variable selector">
+                        <button class="variable-tab is-active" data-variable="tmpf" type="button">Air Temp</button>
+                        <button class="variable-tab" data-variable="dwpf" type="button">Dew Point</button>
+                        <button class="variable-tab" data-variable="relh" type="button">Humidity</button>
+                        <button class="variable-tab" data-variable="sknt" type="button">Wind</button>
+                        <button class="variable-tab" data-variable="pday" type="button">Rain</button>
+                        <button class="variable-tab" data-variable="cci" type="button">CCI</button>
+                    </div>
+                    <div class="toolbar-selects">
+                        <label class="sr-only" for="display-variable">Display variable</label>
+                        <select id="display-variable" class="control-select control-select-variable">
+                            <option value="tmpf" selected>Air Temperature</option>
+                            <option value="dwpf">Dew Point</option>
+                            <option value="relh">Relative Humidity</option>
+                            <option value="sknt">Wind Speed</option>
+                            <option value="pday">Daily Rainfall</option>
+                            <option value="cci">Cattle Comfort Index</option>
+                        </select>
+                        <label class="sr-only" for="display-units">Display units</label>
+                        <select id="display-units" class="control-select">
+                            <option value="f" selected>Degrees Fahrenheit</option>
+                            <option value="c">Degrees Celsius</option>
+                        </select>
+                        <label class="sr-only" for="display-timezone">Display timezone</label>
+                        <select id="display-timezone" class="control-select">
+                            <option value="central" selected>Central Time</option>
+                            <option value="utc">UTC</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="map" class="map-container"></div>
+
+            <div class="tool-rail" aria-label="Map quick tools">
+                <button id="rail-layers" class="rail-btn" type="button" title="Toggle basemap" aria-label="Toggle basemap">L</button>
+                <button id="rail-panel-toggle" class="rail-btn" type="button" title="Toggle observation panel" aria-label="Toggle observation panel">S</button>
+                <button id="rail-download" class="rail-btn" type="button" title="Download latest data" aria-label="Download latest data">D</button>
+                <button id="rail-stale-toggle" class="rail-btn rail-btn-alert" type="button" title="Toggle stale stations" aria-label="Toggle stale stations">!</button>
+            </div>
+
+            <div id="nws-forecast-row" class="forecast-row" aria-live="polite"></div>
         </div>
     </div>
-
-
 EOM;
 $t->headextra = <<<EOM
 <link rel="stylesheet" href="/vendor/openlayers/{$OL}/ol.css">
