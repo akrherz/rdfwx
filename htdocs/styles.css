@@ -30,9 +30,22 @@
     gap: 14px;
     align-items: stretch;
     width: 100%;
-    max-width: 1500px;
     margin-bottom: 1rem;
     font-family: "Barlow", "Trebuchet MS", sans-serif;
+}
+
+#main-content,
+#main-content .outer-pad,
+#main-content .outer-pad > div,
+#block-iastate2022wd-mainpagecontent,
+#block-iastate2022wd-mainpagecontent > article {
+    width: 100%;
+    max-width: none;
+}
+
+#main-content .outer-pad {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
 }
 
 .wx-layout.obs-collapsed {
@@ -167,6 +180,41 @@
     border: 1px solid rgba(0, 0, 0, 0.25);
     border-radius: 2px;
     flex: 0 0 14px;
+}
+
+.cci-legend-wrap {
+    width: 100%;
+    display: grid;
+    gap: 6px;
+}
+
+.cci-legend-row {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+    font-size: 0.82rem;
+    line-height: 1.15;
+}
+
+.cci-legend-swatch {
+    width: 14px;
+    height: 14px;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    border-radius: 2px;
+}
+
+.cci-legend-category {
+    color: #233740;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.cci-legend-range {
+    color: #2d414a;
+    font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
 }
 
 .map-stage {
