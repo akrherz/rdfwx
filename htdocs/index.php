@@ -1,6 +1,6 @@
 <?php
 require_once "../include/myview.php";
-$OL="10.9.0";
+$OL="10.10.0";
 $t = new MyView();
 $t->content = <<<EOM
 
@@ -71,6 +71,7 @@ $t->content = <<<EOM
                         <button class="variable-tab" data-variable="sknt" type="button">Wind</button>
                         <button class="variable-tab" data-variable="pday" type="button">Rain</button>
                         <button class="variable-tab" data-variable="cci" type="button">CCI</button>
+                        <button class="variable-tab" data-variable="cci_shade" type="button">CCI Shade</button>
                     </div>
                     <div class="toolbar-selects">
                         <label class="sr-only" for="display-variable">Display variable</label>
@@ -81,16 +82,12 @@ $t->content = <<<EOM
                             <option value="sknt">Wind Speed</option>
                             <option value="pday">Daily Rainfall</option>
                             <option value="cci">Cattle Comfort Index</option>
+                            <option value="cci_shade">Cattle Comfort Index Shade</option>
                         </select>
                         <label class="sr-only" for="display-units">Display units</label>
                         <select id="display-units" class="control-select">
-                            <option value="f" selected>Degrees Fahrenheit</option>
-                            <option value="c">Degrees Celsius</option>
-                        </select>
-                        <label class="sr-only" for="display-timezone">Display timezone</label>
-                        <select id="display-timezone" class="control-select">
-                            <option value="central" selected>Central Time</option>
-                            <option value="utc">UTC</option>
+                            <option value="english" selected>English Units</option>
+                            <option value="metric">Metric Units</option>
                         </select>
                     </div>
                 </div>
@@ -111,11 +108,11 @@ $t->content = <<<EOM
 EOM;
 $t->headextra = <<<EOM
 <link rel="stylesheet" href="/vendor/openlayers/{$OL}/ol.css">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=2">
 EOM;
 $t->jsextra = <<<EOM
 <script src="/vendor/openlayers/{$OL}/ol.js"></script>
-<script src="index.js?v=3"></script>
+<script src="index.js?v=4"></script>
 EOM;
 
 $t->render('full.phtml');

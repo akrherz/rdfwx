@@ -18,6 +18,7 @@ const VARIABLE_META = {
     sknt: { title: 'Wind Speed', legendTitle: 'Wind Speed Legend' },
     pday: { title: 'Daily Rainfall', legendTitle: 'Rainfall Legend' },
     cci: { title: 'Adult Cattle Comfort Index', legendTitle: 'Cattle Comfort Index Legend' },
+    cci_shade: { title: 'Adult Cattle Comfort Index Shade', legendTitle: 'Cattle Comfort Index Legend' },
 };
 
 const LEGEND_CONTENT = {
@@ -41,10 +42,16 @@ const LEGEND_CONTENT = {
         ['#f3f5f7', '< 0.01 in'], ['#dceef8', '0.01-0.09 in'], ['#9bc8e4', '0.10-0.49 in'], ['#5a9fd1', '0.50-0.99 in'], ['#2367ad', '>= 1.00 in'],
     ],
     cci: [
-        ['#355ebd', '<= -40'], ['#4d82ce', '-39 to -15'], ['#76aed8', '-14 to 10'], ['#b7d6de', '11 to 35'],
-        ['#ecd580', '36 to 60'], ['#e29a4d', '61 to 85'], ['#d14a31', '86 to 110'], ['#8f111f', '> 110'],
+        ['#73d92d', 'No Stress'], ['#80c1ff', 'Mild'], ['#ffe200', 'Moderate'],
+        ['#ff8533', 'Severe'], ['#ff0000', 'Extreme'], ['#af66cc', 'Extreme Danger'],
+    ],
+    cci_shade: [
+        ['#73d92d', 'No Stress'], ['#80c1ff', 'Mild'], ['#ffe200', 'Moderate'],
+        ['#ff8533', 'Severe'], ['#ff0000', 'Extreme'], ['#af66cc', 'Extreme Danger'],
     ],
 };
+
+const CCI_LEGEND_THRESHOLDS_F = [77, 86, 95, 104, 113];
 
 // Utility function to convert knots to MPH and round to integer
 function knotsToMph(knots) {
@@ -146,6 +153,17 @@ function convertTemperature(fahrenheit) {
     return value;
 }
 
+function convertCci(valueInFahrenheit) {
+    const value = parseNumeric(valueInFahrenheit);
+    if (value === null) {
+        return null;
+    }
+    if (currentUnits === 'c') {
+        return (value - 32.0) * (5.0 / 9.0);
+    }
+    return value;
+}
+
 function convertRain(inches) {
     const value = parseNumeric(inches);
     if (value === null) {
@@ -189,11 +207,12 @@ function update_page(data) {
         const airTemp = convertTemperature(props.tmpf);
         const rainfall = convertRain(props.pday);
         const windData = getWindDisplayData(props);
-        const cciValue = props.cci;
+        const cciRaw = parseNumeric(props[currentVariable]) ?? parseNumeric(props.cci);
+        const cciValue = convertCci(cciRaw);
 
         $("#airtemp").text(`Air Temp: ${formatValue(airTemp, getTemperatureUnitLabel())}`);
         $("#rain").text(`Rainfall: ${formatValue(rainfall, getRainUnitLabel(), 2)}`);
-        if (currentVariable === 'cci') {
+        if (currentVariable === 'cci' || currentVariable === 'cci_shade') {
             $("#humidity").text(`CCI: ${formatValue(cciValue)}`);
         } else {
             const relhValue = parseNumeric(props.relh ?? props.rh);
@@ -270,7 +289,8 @@ function highlightSelectedStation(feature) {
         highlightedFeature.setStyle(createCombinedStyle(
             highlightedFeature.get('tmpf'),
             highlightedFeature.get('sknt'),
-            highlightedFeature.get('drct')
+            highlightedFeature.get('drct'),
+            getStationLabelText(highlightedFeature)
         ));
     }
 
@@ -288,7 +308,7 @@ function highlightSelectedStation(feature) {
         zIndex: 3, // Ensure the highlight is above other styles
     });
 
-    feature.setStyle([highlightStyle, ...createCombinedStyle(temp, speed, direction)]);
+    feature.setStyle([highlightStyle, ...createCombinedStyle(temp, speed, direction, getStationLabelText(feature))]);
     highlightedFeature = feature; // Update the highlighted feature
 }
 
@@ -308,8 +328,10 @@ function update_dropdown_and_page(feature) {
 
     $("#airtemp").text(`Air Temp: ${formatValue(airTemp, getTemperatureUnitLabel())}`);
     $("#rain").text(`Rainfall: ${formatValue(rainfall, getRainUnitLabel(), 2)}`);
-    if (currentVariable === 'cci') {
-        $("#humidity").text(`CCI: ${formatValue(props.cci)}`);
+    if (currentVariable === 'cci' || currentVariable === 'cci_shade') {
+        const cciRaw = parseNumeric(props[currentVariable]) ?? parseNumeric(props.cci);
+        const cciValue = convertCci(cciRaw);
+        $("#humidity").text(`CCI: ${formatValue(cciValue)}`);
     } else {
         const relhValue = parseNumeric(props.relh ?? props.rh);
         $("#humidity").text(`Humidity: ${formatValue(relhValue, '%')}`);
@@ -523,21 +545,56 @@ function getVariableValue(feature, variable) {
     if (variable === 'pday') {
         return convertRain(value);
     }
-    if (variable === 'cci') {
-        return value;
+    if (variable === 'cci' || variable === 'cci_shade') {
+        return convertCci(value);
     }
     return value;
 }
 
 function getCciColor(value) {
-    if (value <= -40) return '#355ebd';
-    if (value <= -15) return '#4d82ce';
-    if (value <= 10) return '#76aed8';
-    if (value <= 35) return '#b7d6de';
-    if (value <= 60) return '#ecd580';
-    if (value <= 85) return '#e29a4d';
-    if (value <= 110) return '#d14a31';
-    return '#8f111f';
+    const normalizedF = currentUnits === 'c' ? ((value * 9.0) / 5.0) + 32.0 : value;
+    if (normalizedF <= 77) return '#73d92d';
+    if (normalizedF <= 86) return '#80c1ff';
+    if (normalizedF <= 95) return '#ffe200';
+    if (normalizedF <= 104) return '#ff8533';
+    if (normalizedF <= 113) return '#ff0000';
+    return '#af66cc';
+}
+
+function getCciThresholdLabels() {
+    if (currentUnits === 'c') {
+        return CCI_LEGEND_THRESHOLDS_F.map((value) => `${Math.round((value - 32) * (5 / 9))}°C`);
+    }
+    return CCI_LEGEND_THRESHOLDS_F.map((value) => `${value}°F`);
+}
+
+function getCciLegendHtml() {
+    const labels = getCciThresholdLabels();
+
+    const rows = [
+        { color: '#73d92d', category: 'No Stress', range: `<= ${labels[0]}` },
+        { color: '#80c1ff', category: 'Mild', range: `${labels[0]} - ${labels[1]}` },
+        { color: '#ffe200', category: 'Moderate', range: `${labels[1]} - ${labels[2]}` },
+        { color: '#ff8533', category: 'Severe', range: `${labels[2]} - ${labels[3]}` },
+        { color: '#ff0000', category: 'Extreme', range: `${labels[3]} - ${labels[4]}` },
+        { color: '#af66cc', category: 'Extreme Danger', range: `> ${labels[4]}` },
+    ];
+
+    const rowHtml = rows
+        .map((row) => `
+            <div class="cci-legend-row">
+                <span class="cci-legend-swatch" style="background:${row.color};" aria-hidden="true"></span>
+                <span class="cci-legend-category">${row.category}</span>
+                <span class="cci-legend-range">${row.range}</span>
+            </div>
+        `)
+        .join('');
+
+    return `
+        <div class="cci-legend-wrap">
+            ${rowHtml}
+        </div>
+    `;
 }
 
 function getVariableColor(value, variable) {
@@ -573,10 +630,38 @@ function getVariableColor(value, variable) {
         if (value < heavy) return '#5a9fd1';
         return '#2367ad';
     }
-    if (variable === 'cci') {
+    if (variable === 'cci' || variable === 'cci_shade') {
         return getCciColor(value);
     }
     return '#4575b4';
+}
+
+function getStationLabelText(feature) {
+    const value = getVariableValue(feature, currentVariable);
+    if (value === null) {
+        return 'M';
+    }
+
+    if (currentVariable === 'pday') {
+        return value.toFixed(2);
+    }
+    if (currentVariable === 'relh') {
+        return `${Math.round(value)}%`;
+    }
+    return `${Math.round(value)}`;
+}
+
+function createValueLabelStyle(labelText) {
+    return new ol.style.Style({
+        text: new ol.style.Text({
+            text: labelText,
+            font: 'bold 12px Barlow, Trebuchet MS, sans-serif',
+            fill: new ol.style.Fill({ color: '#111111' }),
+            stroke: new ol.style.Stroke({ color: '#ffffff', width: 3 }),
+            offsetY: -13,
+        }),
+        zIndex: 4,
+    });
 }
 
 function createWindArrowStyle(speed, direction) {
@@ -598,21 +683,23 @@ function createWindArrowStyle(speed, direction) {
     });
 }
 
-function createCombinedStyle(temp, speed, direction) {
+function createCombinedStyle(temp, speed, direction, labelText = 'M') {
     const tempValue = parseNumeric(temp);
     const speedValue = parseNumeric(speed);
     const directionValue = parseNumeric(direction);
+    const labelStyle = createValueLabelStyle(labelText);
 
     if (tempValue === null) {
         return [
             new ol.style.Style({
-                text: new ol.style.Text({
-                    text: 'M',
-                    font: 'bold 16px Arial',
-                    fill: new ol.style.Fill({ color: 'black' }),
-                    stroke: new ol.style.Stroke({ color: 'white', width: 2 }),
+                image: new ol.style.Circle({
+                    radius: 6.25,
+                    fill: new ol.style.Fill({ color: '#9ba7ad' }),
+                    stroke: new ol.style.Stroke({ color: 'black', width: 1.25 }),
                 }),
+                zIndex: 2,
             }),
+            labelStyle,
         ];
     }
 
@@ -626,6 +713,7 @@ function createCombinedStyle(temp, speed, direction) {
             zIndex: 2, // Ensure the circle is rendered on top of the arrow
         }),
         ...(speedValue === null || directionValue === null ? [] : [createWindArrowStyle(speedValue, directionValue)]),
+        labelStyle,
     ];
 }
 
@@ -665,11 +753,12 @@ function update_map(data) {
             const temp = feature.get('tmpf');
             const speed = feature.get('sknt');
             const direction = feature.get('drct');
+            const labelStyle = createValueLabelStyle(getStationLabelText(feature));
 
             if (currentVariable !== 'tmpf') {
                 const value = getVariableValue(feature, currentVariable);
                 if (value === null) {
-                    return createCombinedStyle(temp, speed, direction);
+                    return createCombinedStyle(temp, speed, direction, getStationLabelText(feature));
                 }
                 return [
                     new ol.style.Style({
@@ -680,9 +769,10 @@ function update_map(data) {
                         }),
                         zIndex: 2,
                     }),
+                    labelStyle,
                 ];
             }
-            return createCombinedStyle(temp, speed, direction);
+            return createCombinedStyle(temp, speed, direction, getStationLabelText(feature));
         },
     });
 
@@ -707,8 +797,13 @@ function addTemperatureLegend() {
     if (!legendPanel) {
         return;
     }
+    if (currentVariable === 'cci' || currentVariable === 'cci_shade') {
+        legendPanel.innerHTML = getCciLegendHtml();
+        return;
+    }
+
     const rows = getLegendRows(currentVariable);
-    const gradient = (currentVariable === 'tmpf' || currentVariable === 'dwpf' || currentVariable === 'cci')
+    const gradient = (currentVariable === 'tmpf' || currentVariable === 'dwpf')
         ? '<div class="legend-gradient" aria-hidden="true"></div>'
         : '';
     const legendRows = rows
@@ -758,10 +853,10 @@ function getLegendRows(variable) {
             ['#f3f5f7', '< 0.01 in'], ['#dceef8', '0.01-0.09 in'], ['#9bc8e4', '0.10-0.49 in'], ['#5a9fd1', '0.50-0.99 in'], ['#2367ad', '>= 1.00 in'],
         ];
     }
-    if (variable === 'cci') {
+    if (variable === 'cci' || variable === 'cci_shade') {
         return [
-            ['#355ebd', '<= -40'], ['#4d82ce', '-39 to -15'], ['#76aed8', '-14 to 10'], ['#b7d6de', '11 to 35'],
-            ['#ecd580', '36 to 60'], ['#e29a4d', '61 to 85'], ['#d14a31', '86 to 110'], ['#8f111f', '> 110'],
+            ['#73d92d', 'No Stress'], ['#80c1ff', 'Mild'], ['#ffe200', 'Moderate'],
+            ['#ff8533', 'Severe'], ['#ff0000', 'Extreme'], ['#af66cc', 'Extreme Danger'],
         ];
     }
     return LEGEND_CONTENT.tmpf;
@@ -784,8 +879,8 @@ function getActiveVariableLabel(props) {
     if (currentVariable === 'relh') {
         return `${VARIABLE_META[currentVariable].title}: ${formatValue(value, '%')}`;
     }
-    if (currentVariable === 'cci') {
-        return `${VARIABLE_META[currentVariable].title}: ${formatValue(value)}`;
+    if (currentVariable === 'cci' || currentVariable === 'cci_shade') {
+        return `${VARIABLE_META[currentVariable].title}: ${formatValue(convertCci(value))}`;
     }
     return `${VARIABLE_META[currentVariable]?.title || 'Value'}: ${formatValue(value)}`;
 }
@@ -804,6 +899,29 @@ function syncVariableUi(variable) {
     }
 }
 
+function syncStateToUrl() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('variable', currentVariable);
+    url.searchParams.set('units', currentUnits === 'c' ? 'metric' : 'english');
+    url.searchParams.delete('map');
+    window.history.replaceState({}, '', url);
+}
+
+function normalizeUnits(units) {
+    const value = (units || '').toString().toLowerCase();
+    if (value === 'metric' || value === 'c' || value === 'si') {
+        return 'c';
+    }
+    if (value === 'english' || value === 'f' || value === 'imperial') {
+        return 'f';
+    }
+    return null;
+}
+
+function getUnitsSelectValue() {
+    return currentUnits === 'c' ? 'metric' : 'english';
+}
+
 function setCurrentVariable(variable) {
     if (!VARIABLE_META[variable]) {
         return;
@@ -811,21 +929,25 @@ function setCurrentVariable(variable) {
     currentVariable = variable;
     syncVariableUi(variable);
     addTemperatureLegend();
+    syncStateToUrl();
     if (latestGeoJSON) {
+        update_page(latestGeoJSON);
         update_map(latestGeoJSON);
     }
 }
 
 function setCurrentUnits(units) {
-    if (units !== 'f' && units !== 'c') {
+    const normalizedUnits = normalizeUnits(units);
+    if (!normalizedUnits) {
         return;
     }
-    currentUnits = units;
+    currentUnits = normalizedUnits;
     const unitSelect = document.getElementById('display-units');
     if (unitSelect) {
-        unitSelect.value = units;
+        unitSelect.value = getUnitsSelectValue();
     }
     addTemperatureLegend();
+    syncStateToUrl();
     if (latestGeoJSON) {
         update_page(latestGeoJSON);
         update_map(latestGeoJSON);
@@ -923,6 +1045,7 @@ function initToolbarUi() {
 
     const unitsSelect = document.getElementById('display-units');
     if (unitsSelect) {
+        unitsSelect.value = getUnitsSelectValue();
         unitsSelect.addEventListener('change', (event) => {
             setCurrentUnits(event.target.value);
         });
@@ -952,14 +1075,28 @@ function initToolRailUi() {
 
 function initVariableFromQueryString() {
     const params = new URLSearchParams(window.location.search);
+    const variableParam = (params.get('variable') || '').toLowerCase();
+    if (VARIABLE_META[variableParam]) {
+        currentVariable = variableParam;
+        return;
+    }
+
     const mapParam = (params.get('map') || '').toLowerCase();
+    if (mapParam === 'stressadultcattlecomfortindexshade' || mapParam === 'cattlecomfortindexshade' || mapParam === 'ccishade' || mapParam === 'cci_shade') {
+        currentVariable = 'cci_shade';
+        return;
+    }
     if (mapParam === 'stressadultcattlecomfortindex' || mapParam === 'cattlecomfortindex' || mapParam === 'cci') {
         currentVariable = 'cci';
         return;
     }
-    const variableParam = (params.get('variable') || '').toLowerCase();
-    if (VARIABLE_META[variableParam]) {
-        currentVariable = variableParam;
+}
+
+function initUnitsFromQueryString() {
+    const params = new URLSearchParams(window.location.search);
+    const normalizedUnits = normalizeUnits(params.get('units'));
+    if (normalizedUnits) {
+        currentUnits = normalizedUnits;
     }
 }
 
@@ -993,7 +1130,6 @@ $(document).ready(() => {
     }
 
     $("#site").val(persistedStation);
-    load_geojson();
 
     $("#site").change(() => {
         const site = $("#site").val();
@@ -1030,9 +1166,11 @@ $(document).ready(() => {
     ensureForecastContainerExists();
     addForecastStyles();
     initVariableFromQueryString();
+    initUnitsFromQueryString();
     initToolbarUi();
     initToolRailUi();
 
     addTemperatureLegend();
+    load_geojson();
     startAutoRefresh(); // Start the automatic refresh
 });
