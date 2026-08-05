@@ -931,6 +931,7 @@ function setCurrentVariable(variable) {
     addTemperatureLegend();
     syncStateToUrl();
     if (latestGeoJSON) {
+        update_page(latestGeoJSON);
         update_map(latestGeoJSON);
     }
 }
